@@ -64,8 +64,7 @@ impl CompactSize {
                     return Err(BitcoinError::InsufficientBytes);
                 }
                 let value = u64::from_le_bytes([
-                    bytes[1], bytes[2], bytes[3], bytes[4],
-                    bytes[5], bytes[6], bytes[7], bytes[8],
+                    bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8],
                 ]);
                 Ok((CompactSize::new(value), 9))
             }
@@ -92,8 +91,7 @@ impl<'de> Deserialize<'de> for Txid {
         D: serde::Deserializer<'de>,
     {
         let hex_str = String::deserialize(deserializer)?;
-        let bytes = hex::decode(hex_str)
-            .map_err(serde::de::Error::custom)?;
+        let bytes = hex::decode(hex_str).map_err(serde::de::Error::custom)?;
         if bytes.len() != 32 {
             return Err(serde::de::Error::custom("Invalid txid length"));
         }
@@ -130,9 +128,7 @@ impl OutPoint {
         }
         let mut txid = [0u8; 32];
         txid.copy_from_slice(&bytes[0..32]);
-        let vout = u32::from_le_bytes([
-            bytes[32], bytes[33], bytes[34], bytes[35]
-        ]);
+        let vout = u32::from_le_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]);
         Ok((OutPoint::new(txid, vout), 36))
     }
 }
@@ -201,10 +197,10 @@ impl TransactionInput {
         let mut cursor = 0;
         let (previous_output, consumed) = OutPoint::from_bytes(&bytes[cursor..])?;
         cursor += consumed;
-        
+
         let (script_sig, consumed) = Script::from_bytes(&bytes[cursor..])?;
         cursor += consumed;
-        
+
         if bytes.len() < cursor + 4 {
             return Err(BitcoinError::InsufficientBytes);
         }
@@ -215,8 +211,11 @@ impl TransactionInput {
             bytes[cursor + 3],
         ]);
         cursor += 4;
-        
-        Ok((TransactionInput::new(previous_output, script_sig, sequence), cursor))
+
+        Ok((
+            TransactionInput::new(previous_output, script_sig, sequence),
+            cursor,
+        ))
     }
 }
 
@@ -238,39 +237,39 @@ impl BitcoinTransaction {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        
+
         // Version (4 bytes LE)
         bytes.extend_from_slice(&self.version.to_le_bytes());
-        
+
         // Number of inputs as CompactSize
         let input_count = CompactSize::new(self.inputs.len() as u64);
         bytes.extend(input_count.to_bytes());
-        
+
         // Serialize each input
         for input in &self.inputs {
             bytes.extend(input.to_bytes());
         }
-        
+
         // Lock time (4 bytes LE)
         bytes.extend_from_slice(&self.lock_time.to_le_bytes());
-        
+
         bytes
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
         let mut cursor = 0;
-        
+
         // Read version (4 bytes LE)
         if bytes.len() < 4 {
             return Err(BitcoinError::InsufficientBytes);
         }
         let version = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         cursor += 4;
-        
+
         // Read input count
         let (input_count, consumed) = CompactSize::from_bytes(&bytes[cursor..])?;
         cursor += consumed;
-        
+
         // Read inputs
         let mut inputs = Vec::with_capacity(input_count.value as usize);
         for _ in 0..input_count.value {
@@ -278,7 +277,7 @@ impl BitcoinTransaction {
             inputs.push(input);
             cursor += consumed;
         }
-        
+
         // Read lock_time
         if bytes.len() < cursor + 4 {
             return Err(BitcoinError::InsufficientBytes);
@@ -287,10 +286,10 @@ impl BitcoinTransaction {
             bytes[cursor],
             bytes[cursor + 1],
             bytes[cursor + 2],
-            bytes[cursor + 3]
+            bytes[cursor + 3],
         ]);
         cursor += 4;
-        
+
         Ok((BitcoinTransaction::new(version, inputs, lock_time), cursor))
     }
 }
@@ -298,16 +297,20 @@ impl BitcoinTransaction {
 impl fmt::Display for BitcoinTransaction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Version: {}", self.version)?;
-        
+
         for (i, input) in self.inputs.iter().enumerate() {
             writeln!(f, "Input {}", i)?;
-            writeln!(f, "  Previous Output Txid: {:?}", input.previous_output.txid)?;
+            writeln!(
+                f,
+                "  Previous Output Txid: {:?}",
+                input.previous_output.txid
+            )?;
             writeln!(f, "  Previous Output Vout: {}", input.previous_output.vout)?;
             writeln!(f, "  ScriptSig Length: {}", input.script_sig.bytes.len())?;
             writeln!(f, "  ScriptSig: {:?}", input.script_sig.bytes)?;
             writeln!(f, "  Sequence: {:#x}", input.sequence)?;
         }
-        
+
         writeln!(f, "Lock Time: {}", self.lock_time)
     }
 }
